@@ -22,24 +22,6 @@ bool inline ccw(const Point &a, const Point &b, const Point &c) {
 
 // Return true iff [a,b] intersects [c,d], and store the intersection in ans
 bool intersect_segment(const Point &a, const Point &b, const Point &c, const Point &d, Point &ans) {
-	/*Point ab = Point(b.real() - a.real(),b.imag() - a.imag());
-	Point ac = Point(c.real() - a.real(),c.imag() - a.imag());
-	Point ad = Point(d.real() - a.real(),d.imag() - a.imag());
-
-	double ab_lowY = std::min(a.imag(),b.imag());
-	double ab_highY = std::max(a.imag(),b.imag());
-	double ab_lowX = std::min(a.real(),b.real());
-	double ab_highX = std::max(a.real(),b.real());
-
-	double cd_lowY = std::min(c.imag(),d.imag());
-	double cd_highY = std::max(c.imag(),d.imag());
-	double cd_lowX = std::min(c.real(),d.real());
-	double cd_highX = std::max(c.real(),d.real());
-
-	if(ab_highY < cd_lowY || cd_highY < ab_lowY) return false;
-	if(ab_highX < cd_lowX || cd_highX < ab_lowX) return false;*/
-
-
 	return ccw(a,c,d) != ccw(b,c,d) && ccw(a,b,c) != ccw(a,b,d);
 }
 

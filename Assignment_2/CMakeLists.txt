@@ -5,6 +5,7 @@ project(assignment2)
 add_executable(${PROJECT_NAME}
 	src/main.cpp
 	src/utils.h
+	src/intersect3d.h
 )
 
 # Include Eigen for linear algebra, stb and gif-h to export images

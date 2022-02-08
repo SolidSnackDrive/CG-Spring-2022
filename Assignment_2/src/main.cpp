@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <complex>
 
 // Utilities for the Assignment
 #include "utils.h"
@@ -12,6 +13,7 @@
 
 // Shortcut to avoid Eigen:: everywhere, DO NOT USE IN .h
 using namespace Eigen;
+typedef std::complex<double> Point;
 
 void raytrace_sphere()
 {
@@ -86,9 +88,14 @@ void raytrace_parallelogram()
 
     // TODO: Parameters of the parallelogram (position of the lower-left corner +
     // two sides)
-    Vector3d pgram_origin;
-    Vector3d pgram_u;
-    Vector3d pgram_v;
+    Vector3d pgram_origin (-1,0,-3);
+    Vector3d pgram_u (1,1);
+    Vector3d pgram_v (1,-1);
+
+    Vector3d planeNormal = pgram_u.cross(pgram_v);
+    double planeDist = -planeNormal.dot(pgram_origin);
+
+
 
     // Single light source
     const Vector3d light_position(-1, 1, 1);
@@ -101,7 +108,12 @@ void raytrace_parallelogram()
             Vector3d ray_origin = origin + double(i) * x_displacement + double(j) * y_displacement;
             Vector3d ray_direction = RowVector3d(0, 0, -1);
 
+            Vector3d ray_vector = Vector3d(ray_origin(0),ray_origin(1),ray_direction(2) * 999) - ray_origin;
+
             // TODO: Check if the ray intersects with the parallelogram
+            double t = -(planeNormal.dot(ray_origin) + planeDist) / planeNormal.dot(ray_vector);
+            Vector3d intersect = ray_origin + t*ray_vector;
+
             if (true)
             {
                 // TODO: The ray hit the parallelogram, compute the exact intersection
@@ -140,6 +152,7 @@ void raytrace_perspective()
     Vector3d origin(-1, 1, 1);
     Vector3d x_displacement(2.0 / C.cols(), 0, 0);
     Vector3d y_displacement(0, -2.0 / C.rows(), 0);
+    
 
     // TODO: Parameters of the parallelogram (position of the lower-left corner +
     // two sides)
