@@ -111,14 +111,28 @@ void raytrace_parallelogram()
             Vector3d ray_vector = Vector3d(ray_origin(0),ray_origin(1),ray_direction(2) * 999) - ray_origin;
 
             // TODO: Check if the ray intersects with the parallelogram
-            double t = -(planeNormal.dot(ray_origin) + planeDist) / planeNormal.dot(ray_vector);
-            Vector3d intersect = ray_origin + t*ray_vector;
+            //double t = -(planeNormal.dot(ray_origin) + planeDist) / planeNormal.dot(ray_vector);
+            //Vector3d intersect = ray_origin + t*ray_vector;
 
-            if (true)
+
+            /*
+                a + u(b-a) + v(c-a) = e + td
+                u(b-a) + v(c-a) - td = (e - a)
+            */
+
+           Matrix3d linA;
+           linA << pgram_u, pgram_v, (-1* ray_vector);
+
+           Vector3d linb = ray_origin - pgram_origin;
+
+           Vector3d linx = linA.colPivHouseholderQr().solve(linb);
+
+
+            if (linx(2) > 0 && linx(0) >= 0 && linx(1) >= 1 && (linx(0) + linx(1) <= 1))
             {
                 // TODO: The ray hit the parallelogram, compute the exact intersection
                 // point
-                Vector3d ray_intersection(0, 0, 0);
+                Vector3d ray_intersection = linx(2) * ray_vector;
 
                 // TODO: Compute normal at the intersection point
                 Vector3d ray_normal = ray_intersection.normalized();
