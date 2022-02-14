@@ -98,8 +98,6 @@ void raytrace_parallelogram()
     Vector3d pgram_u (0,0.7,-10);
     Vector3d pgram_v (1,0.4,0);
 
-   std::cerr << "B4 loop\n\n";
-
     Vector3d planeNormal = pgram_u.cross(pgram_v);
     double planeDist = -planeNormal.dot(pgram_origin);
 
@@ -275,7 +273,8 @@ void raytrace_shading()
 
     // The camera is perspective, pointing in the direction -z and covering the
     // unit square (-1,1) in x and y
-    Vector3d origin(-1, 1, 1);
+    Vector3d camera_origin(0,0,3);
+    Vector3d image_origin(-1, 1, 1);
     Vector3d x_displacement(2.0 / C.cols(), 0, 0);
     Vector3d y_displacement(0, -2.0 / C.rows(), 0);
 
@@ -285,33 +284,56 @@ void raytrace_shading()
     MatrixXd diffuse = MatrixXd::Zero(800, 800);
     MatrixXd specular = MatrixXd::Zero(800, 800);
 
+    //color params
     const Vector3d diffuse_color(1, 0, 1);
     const double specular_exponent = 100;
     const Vector3d specular_color(0., 0, 1);
+
+    //Sphere params
+    Vector3d sphere_center(0,0,0);
+    const double sphere_radius = 0.9;
 
     for (unsigned i = 0; i < C.cols(); ++i)
     {
         for (unsigned j = 0; j < C.rows(); ++j)
         {
-            // Prepare the ray
-            Vector3d ray_origin = origin + double(i) * x_displacement + double(j) * y_displacement;
-            Vector3d ray_direction = RowVector3d(0, 0, -1);
+            Vector3d ray_origin = image_origin + double(i) * x_displacement + double(j) * y_displacement;
+            Vector3d ray_direction = ray_origin - camera_origin;
+            ray_direction.normalize();
 
             // Intersect with the sphere
             // NOTE: this is a special case of a sphere centered in the origin and for
             // orthographic rays aligned with the z axis
-            Vector2d ray_on_xy(ray_origin(0), ray_origin(1));
-            const double sphere_radius = 0.9;
+            Vector3d L = sphere_center - camera_origin;
+            double len_origin_center = L.dot(ray_direction);
+            if(len_origin_center < 0) {
+                continue;
+            }
 
-            if (ray_on_xy.norm() < sphere_radius)
+            double len_center_ray = L.dot(L) - (len_origin_center * len_origin_center);
+            if(len_center_ray < 0) {
+                continue;
+            }
+
+            double len_center_intersect = sqrt(sphere_radius * sphere_radius - len_center_ray);
+            double t = len_origin_center - len_center_intersect;
+            /*
+            std::cerr << "L: " << L << std::endl;
+            std::cerr << "L dot L: " << L.dot(L) << std::endl;           
+            std::cerr << "len_origin_center: " << len_origin_center << std::endl;
+            std::cerr << "len_center_ray: " << len_center_ray << std::endl;
+            std::cerr << "len_center_intersect: " << len_center_intersect << std::endl;
+            std::cerr << "t: " << t << std::endl;*/
+
+            if (t > 0)
             {
+                //std::cerr << "HIT\n";
                 // The ray hit the sphere, compute the exact intersection point
-                Vector3d ray_intersection(
-                    ray_on_xy(0), ray_on_xy(1),
-                    sqrt(sphere_radius * sphere_radius - ray_on_xy.squaredNorm()));
+                Vector3d ray_intersection = camera_origin + t * ray_direction;
 
                 // Compute normal at the intersection point
-                Vector3d ray_normal = ray_intersection.normalized();
+                Vector3d ray_normal = ray_intersection - sphere_center;
+                ray_normal.normalize();
 
                 // TODO: Add shading parameter here
 
@@ -338,16 +360,15 @@ void raytrace_shading()
             }
         }
     }
-
     // Save to png
     write_matrix_to_png(RGB[0], RGB[1], RGB[2], A, filename);
 }
 
 int main()
 {
-   // raytrace_sphere();
-   // raytrace_parallelogram();
-   // raytrace_perspective();
+    raytrace_sphere();
+    raytrace_parallelogram();
+    raytrace_perspective();
     raytrace_shading();
 
     return 0;
