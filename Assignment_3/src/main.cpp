@@ -450,8 +450,8 @@ void raytrace_scene()
 {
     std::cout << "Simple ray tracer." << std::endl;
 
-    int w = 800;
-    int h = 400;
+    int w = 1920;
+    int h = 1080;
     MatrixXd R = MatrixXd::Zero(w, h);
     MatrixXd G = MatrixXd::Zero(w, h);
     MatrixXd B = MatrixXd::Zero(w, h);
