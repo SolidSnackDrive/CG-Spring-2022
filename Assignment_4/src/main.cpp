@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <numeric>
 #include <queue>
+#include <stack>
 
 // Utilities for the Assignment
 #include "utils.h"
@@ -47,7 +48,7 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 const std::string data_dir = DATA_DIR;
 const std::string filename("raytrace.png");
-const std::string mesh_filename(data_dir + "bunny.off");
+const std::string mesh_filename(data_dir + "dragon.off");
 
 //Camera settings
 const double focal_length = 2;
@@ -100,7 +101,9 @@ void setup_scene()
     }
 
     //setup tree
+    std::cout << "Constructing BVH tree." << std::endl;
     bvh = AABBTree(vertices, facets);
+    std::cout << "Finished constructing tree." << std::endl;
 
     //Lights
     light_positions.emplace_back(8, 8, 0);
@@ -138,30 +141,7 @@ AlignedBox3d bbox_from_triangle(const Vector3d &a, const Vector3d &b, const Vect
     return box;
 }
 
-class TriCent {
-    public:
-        int index;
-        Matrix3d abc;
-        Vector3d centroid;
-    
-};
-
-class CompareAxis {
-    int index_ = 0;
-public:
-    CompareAxis(int index) {
-        index_ = index;
-    }
-    bool operator() (TriCent& a, TriCent& b) {
-        return compareAxis(a, b, index_);
-    }
-private:
-    bool compareAxis(TriCent& a, TriCent& b, int index) {
-        return  a.centroid(index) < b.centroid(index);
-    }
-};
-
-int construct_tree2(const MatrixXd& centroids, std::vector<int>& indices, AABBTree *tree) {
+int construct_tree2(const MatrixXd& centroids, std::vector<int>& indices, int start_range, int end_range, AABBTree *tree) {
     /***
      * 
         Split the input set of triangles into two sets S1 and S2.
@@ -171,17 +151,17 @@ int construct_tree2(const MatrixXd& centroids, std::vector<int>& indices, AABBTr
         Return the new root node R.
     ***/
 
-    AABBTree::Node R;
-    int R_index = tree->nodes.size();
+    AABBTree::Node R; //Root node for this depth
+    int R_index = tree->nodes.size(); //Root index in the tree std vector
     tree->nodes.push_back(R);
 
-    if(centroids.rows() == 1) {
-        Vector3i facet_row = facets.row(indices[0]);
+    if((end_range - start_range) == 1) { //At this point we are down to just one triangle, so get bounding box from vertices
+        Vector3i facet_row = facets.row(indices[start_range]);
         Vector3d a = vertices.row(facet_row(0));
         Vector3d b = vertices.row(facet_row(1));
         Vector3d c = vertices.row(facet_row(2));
         tree->nodes[R_index].bbox = bbox_from_triangle(a,b,c);
-        tree->nodes[R_index].triangle = indices[0];
+        tree->nodes[R_index].triangle = indices[start_range];
         tree->nodes[R_index].left = -1;
         tree->nodes[R_index].right = -1;
 
@@ -199,113 +179,49 @@ int construct_tree2(const MatrixXd& centroids, std::vector<int>& indices, AABBTr
     diag.maxCoeff(&axis_index);
 
     if(axis_index == 0) {
-        std::sort(indices.begin(), indices.end(), 
+        std::sort(indices.begin() + start_range, indices.begin() + end_range, 
             [&] (int A, int B) -> bool {
                 return centroids.row(A)(0) < centroids.row(B)(0);
             });
     }
     else if(axis_index == 1) {
-        std::sort(indices.begin(), indices.end(), 
+        std::sort(indices.begin() + start_range, indices.begin() + end_range, 
             [&] (int A, int B) -> bool {
                 return centroids.row(A)(1) < centroids.row(B)(1);
             });
     }
     else if(axis_index == 2) {
-        std::sort(indices.begin(), indices.end(), 
+        std::sort(indices.begin() + start_range, indices.begin() + end_range, 
             [&] (int A, int B) -> bool {
                 return centroids.row(A)(2) < centroids.row(B)(2);
             });
     }
+    
 
-    std::size_t const half_size = indices.size() / 2;
-    std::vector<int> left(indices.begin(), indices.begin() + half_size);
-    std::vector<int> right(indices.begin() + half_size, indices.end());
+    //std::size_t const half_size = indices.size() / 2;
+    int const half_size = (end_range - start_range) / 2;
+    /*std::vector<int> left(indices.begin(), indices.begin() + half_size);
+    std::vector<int> right(indices.begin() + half_size, indices.end());*/
 
-    int T1 = construct_tree2(centroids, left, tree);
-    int T2 = construct_tree2(centroids, right, tree);
+    int left_start = start_range;
+    int left_end = start_range + half_size;
+
+    int right_start = start_range + half_size;
+    int right_end = end_range;
+
+    int T1 = construct_tree2(centroids, indices, left_start, left_end, tree);
+    int T2 = construct_tree2(centroids, indices, right_start, right_end, tree);
 
     tree->nodes[T1].parent = R_index;
     tree->nodes[T2].parent = R_index;
     tree->nodes[R_index].left = T1;
     tree->nodes[R_index].right = T2;
+    tree->nodes[R_index].triangle = -1;
     tree->nodes[R_index].bbox.extend(tree->nodes[T1].bbox);
     tree->nodes[R_index].bbox.extend(tree->nodes[T2].bbox);
 
     return R_index;
 }
-
-int construct_tree(std::vector<TriCent>& pairs, AABBTree* tree, int parent) {
-    AABBTree::Node node_new;
-
-    MatrixXd centroids(pairs.size(), 3);
-    for(int i = 0; i < pairs.size(); i ++) {
-        centroids.row(i) = pairs[i].centroid;
-    }
-    
-    Vector3d min_corner;
-    min_corner = centroids.colwise().minCoeff();
-    Vector3d max_corner;
-    max_corner = centroids.colwise().maxCoeff();
-
-    AlignedBox3d bbox;
-    bbox.extend(min_corner);
-    bbox.extend(max_corner);
-
-    int index_new = tree->nodes.size();
-    tree->nodes.push_back(node_new);
-
-    tree->nodes[index_new].bbox = bbox;
-    tree->nodes[index_new].parent = parent;
-
-    if(pairs.size() == 1) {
-        tree->nodes[index_new].bbox = bbox_from_triangle(pairs[0].abc.col(0), pairs[0].abc.col(1), pairs[0].abc.col(2));
-        tree->nodes[index_new].triangle = pairs[0].index;
-        tree->nodes[index_new].left = -1;
-        tree->nodes[index_new].right = -1;
-        return index_new;
-    }
-
-    Vector3d diag = max_corner - min_corner;
-    
-    VectorXd::Index axis_index;
-    diag.maxCoeff(&axis_index);
-
-    //SORT TIME
-    std::sort(pairs.begin(), pairs.end(), CompareAxis(axis_index));
-
-    int leftsize,rightsize;
-    leftsize=rightsize=pairs.size() / 2;
-    if(pairs.size() % 2) leftsize ++ ;
-
-    std::vector<TriCent> left;
-    std::vector<TriCent> right;
-
-    for (int i = 0; i < leftsize; i++) {
-        left.push_back(pairs[i]);
-    }
-        
-    for (int i = leftsize, j = 0; j < rightsize; i++, j++) {
-        right.push_back(pairs[i]);  
-    }
-          
-
-    int pos_l = construct_tree(left, tree, index_new);
-    int pos_r = construct_tree(right, tree, index_new);
-
-    if(pos_l < 0 || pos_r < 0) {
-        std::cerr << "ERR: COULD NOT FIND LEFT OR RIGHT NODE INDEX!!" << std::endl;
-    }
-    else {
-        tree->nodes[index_new].left = pos_l;
-        tree->nodes[index_new].right = pos_r;
-        tree->nodes[index_new].triangle = -1;
-    }
-
-    return index_new;
-}
-
-
-
 
 AABBTree::AABBTree(const MatrixXd &V, const MatrixXi &F)
 {
@@ -313,7 +229,6 @@ AABBTree::AABBTree(const MatrixXd &V, const MatrixXi &F)
 
     MatrixXd centroids(F.rows(), V.cols());
     centroids.setZero();
-    std::vector<TriCent> pairs;
     std::vector<int> indices(centroids.rows());
     std::iota(indices.begin(), indices.end(), 0);
     for (int i = 0; i < F.rows(); ++i)
@@ -323,21 +238,12 @@ AABBTree::AABBTree(const MatrixXd &V, const MatrixXi &F)
             centroids.row(i) += V.row(F(i, k));
         }
         centroids.row(i) /= F.cols();
-        /*TriCent tri;
-        Vector3i facet_row = F.row(i);
-        Vector3d a = vertices.row(facet_row(0));
-        Vector3d b = vertices.row(facet_row(1));
-        Vector3d c = vertices.row(facet_row(2));
-        tri.abc << a,b,c;
-        tri.centroid = centroids.row(i);
-        tri.index = i;
-        pairs.push_back(tri);*/
     }
 
     assert(centroids.rows() == indices.size());
 
     //this->root = construct_tree(pairs, this, -1);
-    this->root = construct_tree2(centroids, indices, this);
+    this->root = construct_tree2(centroids, indices, 0, indices.size(), this);
 
     // TODO
 
@@ -419,7 +325,6 @@ bool find_nearest_object(const Vector3d &ray_origin, const Vector3d &ray_directi
     // Method (1): Traverse every triangle and return the closest hit.
     // Method (2): Traverse the BVH tree and test the intersection with a
     // triangles at the leaf nodes that intersects the input ray.
-    /*
     
     AABBTree::Node root = bvh.nodes[bvh.root];
     if(ray_box_intersection(ray_origin, ray_direction, root.bbox) == false)
@@ -427,26 +332,27 @@ bool find_nearest_object(const Vector3d &ray_origin, const Vector3d &ray_directi
         return false;
     }
 
-    std::queue<AABBTree::Node> queue;
+    std::stack<AABBTree::Node> queue;
     std::vector<AABBTree::Node> leaves;
 
     queue.push(root);
 
     while(queue.size() > 0) {
-        AABBTree::Node current = queue.front();
+        AABBTree::Node current = queue.top();
         queue.pop();
 
-        if(ray_box_intersection(ray_origin, ray_direction, current.bbox)) {
-            if(current.left < 0 && current.right < 0) {
+        if(current.left < 0 && current.right < 0) {
                 leaves.push_back(current);
-            }
-            else {
-                AABBTree::Node left_node = bvh.nodes[current.left];
-                AABBTree::Node right_node = bvh.nodes[current.right];
+        }
+        else {
+            AABBTree::Node left_node = bvh.nodes[current.left];
+            AABBTree::Node right_node = bvh.nodes[current.right];
+            if(ray_box_intersection(ray_origin, ray_direction, left_node.bbox)) {
                 queue.push(left_node);
+            }
+            if(ray_box_intersection(ray_origin, ray_direction, right_node.bbox)) {
                 queue.push(right_node);
             }
-
         }
     }
 
@@ -473,8 +379,8 @@ bool find_nearest_object(const Vector3d &ray_origin, const Vector3d &ray_directi
     }
     else {
         return true;
-    }*/
-    
+    }
+    /*
     double t_final = MAXFLOAT;
     for (int i = 0; i < facets.rows(); i ++) {
         Vector3i facet_row = facets.row(i);
@@ -498,7 +404,7 @@ bool find_nearest_object(const Vector3d &ray_origin, const Vector3d &ray_directi
     }
     else {
         return true;
-    }
+    }*/
 
 }
 
@@ -560,7 +466,7 @@ Vector4d shoot_ray(const Vector3d &ray_origin, const Vector3d &ray_direction)
 
 void raytrace_scene()
 {
-    //std::cout << "Simple ray tracer." << std::endl;
+    std::cout << "Begin rendering scene." << std::endl;
 
     int w = 640;
     int h = 480;
