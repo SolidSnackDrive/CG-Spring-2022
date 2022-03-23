@@ -168,36 +168,6 @@ int construct_tree2(const MatrixXd& centroids, std::vector<int>& indices, int st
         return R_index;
     }
 
-    Vector3d min_corner(0,0,0);
-    min_corner = centroids.colwise().minCoeff();
-    Vector3d max_corner(0,0,0);
-    max_corner = centroids.colwise().maxCoeff();
-
-    Vector3d diag = max_corner - min_corner;
-    
-    VectorXd::Index axis_index = 0;
-    diag.maxCoeff(&axis_index);
-
-    if(axis_index == 0) {
-        std::sort(indices.begin() + start_range, indices.begin() + end_range, 
-            [&] (int A, int B) -> bool {
-                return centroids.row(A)(0) < centroids.row(B)(0);
-            });
-    }
-    else if(axis_index == 1) {
-        std::sort(indices.begin() + start_range, indices.begin() + end_range, 
-            [&] (int A, int B) -> bool {
-                return centroids.row(A)(1) < centroids.row(B)(1);
-            });
-    }
-    else if(axis_index == 2) {
-        std::sort(indices.begin() + start_range, indices.begin() + end_range, 
-            [&] (int A, int B) -> bool {
-                return centroids.row(A)(2) < centroids.row(B)(2);
-            });
-    }
-    
-
     //std::size_t const half_size = indices.size() / 2;
     int const half_size = (end_range - start_range) / 2;
     /*std::vector<int> left(indices.begin(), indices.begin() + half_size);
@@ -238,6 +208,35 @@ AABBTree::AABBTree(const MatrixXd &V, const MatrixXi &F)
             centroids.row(i) += V.row(F(i, k));
         }
         centroids.row(i) /= F.cols();
+    }
+
+    Vector3d min_corner(0,0,0);
+    min_corner = centroids.colwise().minCoeff();
+    Vector3d max_corner(0,0,0);
+    max_corner = centroids.colwise().maxCoeff();
+
+    Vector3d diag = max_corner - min_corner;
+    
+    VectorXd::Index axis_index = 0;
+    diag.maxCoeff(&axis_index);
+
+    if(axis_index == 0) {
+        std::sort(indices.begin(), indices.end(), 
+            [&] (int A, int B) -> bool {
+                return centroids.row(A)(0) < centroids.row(B)(0);
+            });
+    }
+    else if(axis_index == 1) {
+        std::sort(indices.begin(), indices.end(), 
+            [&] (int A, int B) -> bool {
+                return centroids.row(A)(1) < centroids.row(B)(1);
+            });
+    }
+    else if(axis_index == 2) {
+        std::sort(indices.begin(), indices.end(), 
+            [&] (int A, int B) -> bool {
+                return centroids.row(A)(2) < centroids.row(B)(2);
+            });
     }
 
     assert(centroids.rows() == indices.size());
