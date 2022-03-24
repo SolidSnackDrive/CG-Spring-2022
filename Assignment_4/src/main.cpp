@@ -168,10 +168,8 @@ int construct_tree2(const MatrixXd& centroids, std::vector<int>& indices, int st
         return R_index;
     }
 
-    //std::size_t const half_size = indices.size() / 2;
+
     int const half_size = (end_range - start_range) / 2;
-    /*std::vector<int> left(indices.begin(), indices.begin() + half_size);
-    std::vector<int> right(indices.begin() + half_size, indices.end());*/
 
     int left_start = start_range;
     int left_end = start_range + half_size;
@@ -199,6 +197,9 @@ AABBTree::AABBTree(const MatrixXd &V, const MatrixXi &F)
 
     MatrixXd centroids(F.rows(), V.cols());
     centroids.setZero();
+    // Sort a list of indices instead of the actual centroids matrix
+    // We avoid needing to copy or otherwise mutate the matrix this way
+    // and keep the advantage of Eigen functions available to the matrix.
     std::vector<int> indices(centroids.rows());
     std::iota(indices.begin(), indices.end(), 0);
     for (int i = 0; i < F.rows(); ++i)
@@ -239,9 +240,15 @@ AABBTree::AABBTree(const MatrixXd &V, const MatrixXi &F)
             });
     }
 
+    /***
+     *  I do my sort above, only once, before entering the recursive tree construction call.
+     *  It seems that it is probably actually optimal to do a sort on each subset of centroids after the initial split,
+     *  but I was not able to get that implemented properly so I opted for this instead.
+     *  It provides satisfactory results regardless, the dragon is still able to render in less than 30 seconds.
+     **/
+
     assert(centroids.rows() == indices.size());
 
-    //this->root = construct_tree(pairs, this, -1);
     this->root = construct_tree2(centroids, indices, 0, indices.size(), this);
 
     // TODO
@@ -297,6 +304,9 @@ bool ray_box_intersection(const Vector3d &ray_origin, const Vector3d &ray_direct
     // Compute whether the ray intersects the given box.
     // we are not testing with the real surface here anyway.
 
+    //Adapted from Roman Wiche's approach in HLSL detailed here:
+    //https://medium.com/@bromanz/another-view-on-the-classic-ray-aabb-intersection-algorithm-for-bvh-traversal-41125138b525
+
     Vector3d box_min = box.min();
     Vector3d box_max = box.max();
     Vector3d inv_dir = ray_direction.cwiseInverse();
@@ -319,11 +329,6 @@ bool ray_box_intersection(const Vector3d &ray_origin, const Vector3d &ray_direct
 bool find_nearest_object(const Vector3d &ray_origin, const Vector3d &ray_direction, Vector3d &p, Vector3d &N)
 {
     Vector3d tmp_p, tmp_N;
-
-    // TODO
-    // Method (1): Traverse every triangle and return the closest hit.
-    // Method (2): Traverse the BVH tree and test the intersection with a
-    // triangles at the leaf nodes that intersects the input ray.
     
     AABBTree::Node root = bvh.nodes[bvh.root];
     if(ray_box_intersection(ray_origin, ray_direction, root.bbox) == false)
@@ -331,6 +336,7 @@ bool find_nearest_object(const Vector3d &ray_origin, const Vector3d &ray_directi
         return false;
     }
 
+    //Depth first search tree traversal strategy
     std::stack<AABBTree::Node> queue;
     std::vector<AABBTree::Node> leaves;
 
@@ -341,13 +347,13 @@ bool find_nearest_object(const Vector3d &ray_origin, const Vector3d &ray_directi
         queue.pop();
 
         if(current.left < 0 && current.right < 0) {
-                leaves.push_back(current);
+                leaves.push_back(current); //If its a leaf, we know there is a triangle we need to compute a real intersection with
         }
         else {
             AABBTree::Node left_node = bvh.nodes[current.left];
             AABBTree::Node right_node = bvh.nodes[current.right];
             if(ray_box_intersection(ray_origin, ray_direction, left_node.bbox)) {
-                queue.push(left_node);
+                queue.push(left_node); //We only need to proceed further into this tree if we intersect the box
             }
             if(ray_box_intersection(ray_origin, ray_direction, right_node.bbox)) {
                 queue.push(right_node);
@@ -379,31 +385,6 @@ bool find_nearest_object(const Vector3d &ray_origin, const Vector3d &ray_directi
     else {
         return true;
     }
-    /*
-    double t_final = MAXFLOAT;
-    for (int i = 0; i < facets.rows(); i ++) {
-        Vector3i facet_row = facets.row(i);
-        Vector3d a = vertices.row(facet_row(0));
-        Vector3d b = vertices.row(facet_row(1));
-        Vector3d c = vertices.row(facet_row(2));
-
-        double t = ray_triangle_intersection(ray_origin, ray_direction, a, b, c, tmp_p, tmp_N);
-
-        if ( t > 0 ) {
-            if( t < t_final ) {
-                t_final = t;
-                p = tmp_p;
-                N = tmp_N;
-            }  
-        }
-    }
-
-    if(t_final == MAXFLOAT) {
-        return false;
-    }
-    else {
-        return true;
-    }*/
 
 }
 
